@@ -308,7 +308,6 @@ int nrEstrelasDMenorRt (vector<estrela> sistema, int t){
 		if(t == 0) d = distancia(rCM,sistema[i].x0);
 		else if(t == 1) d = distancia(rCM,sistema[i].x1);
 		else d = distancia(rCM,sistema[i].x1);
-		
 		if (d < rT) nrEstrelas++;
 	}
 
@@ -434,14 +433,21 @@ double gerarMassa() {
 	return m;
 }
 
-vector<estrela> gerarPosicoesIniciais(vector<estrela> sistema){
+double PosicaoInicial_R_perfil_King(double r){
+	
+	double PIr = (asinh(r) - r / sqrt(26))/ ((sqrt(26) * asinh(5) - 5 )/sqrt(26)) ;
+	return PIr;
+	}
+	
+	
+void gerarPosicoesIniciais(vector<estrela>* sistema){
 	
 	vector<double> amostrasAceitaveisParaR;
 	
-	while (amostrasAceitaveisParaR.size() < npart){
+	while (amostrasAceitaveisParaR.size() < sistema->size()){
 		double randomX = drand48();	
 		double randomY = drand48();
-		double OrdenadaYdeRandomX = PI(randomX);
+		double OrdenadaYdeRandomX = PosicaoInicial_R_perfil_King(randomX);
 		
 		if (randomY <= OrdenadaYdeRandomX) amostrasAceitaveisParaR.push_back(randomX);
 		
@@ -449,31 +455,70 @@ vector<estrela> gerarPosicoesIniciais(vector<estrela> sistema){
 	
 	vector<double> thetas;
 	vector<double> phis;
-	for (int i = 0; i < npart; i++){
-		double theta = 2* M_PI * amostrasAceitaveisParaR;
+	for (int i = 0; i < sistema->size(); i++){
+		double theta = 2* M_PI * amostrasAceitaveisParaR[i];
 		thetas.push_back(theta);
-		double phi = acos(2 * amostrasAceitaveisParaR - 1);
+		double phi = acos(2 * amostrasAceitaveisParaR[i]- 1);
 		phis.push_back(phi);
 		
 	}	
 	
-	for(int i = 0; i < npart; i++){
-		sistema[i].x0.x = amostrasAceitaveisParaR[i] * cos(thetas[i]) * sin(phis[i]);
-		sistema[i].x0.y = amostrasAceitaveisParaR[i] * sin(thetas[i]) * sin(phis[i]);
-		sistema[i].x0.z = amostrasAceitaveisParaR[i] * cos(phis[i]);
+	for(int i = 0; i < sistema->size(); i++){
+		(*sistema)[i].x0.x = amostrasAceitaveisParaR[i] * cos(thetas[i]) * sin(phis[i]);
+		(*sistema)[i].x0.y = amostrasAceitaveisParaR[i] * sin(thetas[i]) * sin(phis[i]);
+		(*sistema)[i].x0.z = amostrasAceitaveisParaR[i] * cos(phis[i]);
+	}
 			
-	return sistema;
 }
 
 
-
-double PI(double r){
 	
-	double PIr = (asinh(r) - r / sqrt(26))/ ((sqrt(26) * asinh(5) - 5 )/sqrt(26)) ;
-	return PIr;
-	}
+pair<double, double> CalculoComponenteVelocidadeMB(){
+	
+	pair<double, double> componenteVelocidade;
+	double random1 = drand48();
+	double random2 = drand48();
+	
+	double v1 = sqrt(- log( 1- random2)) * sin(2*M_PI*random1);
+	double v2 = sqrt(- log( 1- random2)) * cos(2*M_PI*random1);
+	
+	componenteVelocidade.first = v1;
+	componenteVelocidade.second = v2;
+	
+	return componenteVelocidade;
+	
+}
 
-int ex43(){ 
+
+void gerarVelocidadesIniciais(vector<estrela>* sistema){
+
+	for (int i = 0; i < sistema->size(); i+=2){
+		double phi1 = M_PI*drand48();
+		double theta1 = 2*M_PI*drand48();
+		double phi2 = M_PI*drand48();
+		double theta2 = 2*M_PI*drand48();
+	
+		pair<double, double> componentesX = CalculoComponenteVelocidadeMB();
+		(*sistema)[i].v.x = componentesX.first*sin(phi1)*cos(theta1)*pcConv;
+		(*sistema)[i+1].v.x = componentesX.second*sin(phi2)*cos(theta2)*pcConv;
+		
+		
+		pair<double, double> componentesY = CalculoComponenteVelocidadeMB();
+		(*sistema)[i].v.y = componentesY.first*sin(phi1)*sin(theta1)*pcConv;
+		(*sistema)[i+1].v.y = componentesY.second*sin(phi2)*sin(theta2)*pcConv;
+		
+		
+		pair<double, double> componentesZ = CalculoComponenteVelocidadeMB();
+		(*sistema)[i].v.z = componentesZ.first*cos(theta1)*pcConv;
+		(*sistema)[i+1].v.z = componentesZ.second*cos(theta2)*pcConv;
+		
+	}
+	
+	
+}
+
+
+int ex43(int config){ 
 
 	int npart = 100;
 	estrela newStar;
@@ -486,25 +531,93 @@ int ex43(){
 	
 	}
 	
-	sistema = gerarPosicoesIniciais(sistema);
+	int tMAX = 10*pow(10,6)/deltaT;
+	vector<int> nrTotalEstrelasMenorRt;
+	
+	
+	// SISTEMA SITUA-SE EM T = 0
+	int currentT = 0;
+	// OS PARAM INICIAIS SÃO GERADOS PELAS DISTRUIÇOES DE KING, E MAXWELL-BOLTZMANN
+	gerarPosicoesIniciais(&sistema);
+	gerarVelocidadesIniciais(&sistema);
+	
+	
+	
+	nrTotalEstrelasMenorRt.push_back(nrEstrelasDMenorRt(sistema, currentT));
+	currentT++;
 	
 	
 	
 	
+	// SISTEMA SITUA-SE EM T = 1
+	// CALCULA-SE AS POSIÇOES EM T = 1
+	for(int n = 0; n < npart; n++){
+		sistema[n].x1 = calculo_x1(npart, sistema, currentT, n);
+	}
+	for(int i = 0; i < npart ; i++){
+	 //cout << sistema[i].x1.x << "\t" << sistema[i].x1.y << "\t" << sistema[i].x1.z << endl;
+	 //cout << "modulo r =" << sqrt(pow(sistema[i].x1.x,2) + pow(sistema[i].x1.y,2)+ pow(sistema[i].x1.z, 2)) << endl;
+	 }
+	// CALCULA-SE O CENTRO DE MASSA DO SISTEMA EM T = 1
+	// VERIFICA-SE AS DISTANCIAS DAS ESTRELAS AO CM DO AGLOMERADO
+	nrTotalEstrelasMenorRt.push_back(nrEstrelasDMenorRt(sistema, currentT));
+	currentT++;
+	
+	
+	// SISTEMA SITUA-SE EM T = 2
+	// CALCULA-SE AS POSIÇOES EM T = 2
+	for(int n = 0; n < npart; n++){
+		sistema[n].x2 = calculo_xn(npart, sistema, currentT, n);
+	}
+	
+	// CALCULA-SE O CENTRO DE MASSA DO SISTEMA EM T = 2
+	// VERIFICA-SE AS DISTANCIAS DAS ESTRELAS AO CM DO AGLOMERADO
+	nrTotalEstrelasMenorRt.push_back(nrEstrelasDMenorRt(sistema, currentT));
+	currentT++;
 	
 	
 	
+	// SISTEMA SITUA-SE EM T > 2
+	for(int t = currentT; t < tMAX; t ++){
+		for( int n = 0; n < npart; n++){
+			sistema[n].x0 = sistema[n].x1;
+			sistema[n].x1 = sistema[n].x2;
+		}	
+		
+		for(int n = 0; n < npart; n++){
+			sistema[n].x2 = calculo_xn(npart, sistema, t, n);
+			/*
+			ofstream myFile("EstrelaNr" + to_string(n) + ".txt", fstream::app);
+			myFile << sistema[n].x2.x << "\t" << sistema[n].x2.y << "\t" << sistema[n].x2.z << endl;
+			myFile.close();
+			*/
+			
+			
+		}
+		
+		nrTotalEstrelasMenorRt.push_back(nrEstrelasDMenorRt(sistema, t));
+	 }
+	
+	ofstream file("Distribuicoes43"+to_string(config)+".txt");
+	for(int i = 0; i < nrTotalEstrelasMenorRt.size(); i++){
+		file << nrTotalEstrelasMenorRt[i] << endl;
+	}
 	
 	
 	
-	
-	
+	file.close();
+
+
+
 	return 0;
+	
 }
 
 int main(){
 	//ex41();
 	//ex42();
-	ex43();
+	for(int i = 0; i < 45; i++){
+		ex43(i);
+	}
 	return 0;
 }
